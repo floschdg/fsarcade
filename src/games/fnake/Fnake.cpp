@@ -1,20 +1,18 @@
 #include "games/fnake/Fnake.hpp"
 #include "games/Game.hpp"
 #include "renderer/Renderer.hpp"
-#include "common/defs.hpp"
 #include "common/MemoryManager.hpp"
 #include "common/math.hpp"
 
-#include <cstdint>
 #include <imgui.h>
+
+#include <cstdint>
 #include <fstream>
-
-
-std::mt19937 Fnake::s_rng{std::random_device{}()};
 
 
 Fnake::Fnake()
     : m_font {s_dejavu_sans_mono_filepath, 22}
+    , m_rng {std::random_device{}()}
 {
     static_assert(max_map_width <= sizeof(m_body_bitmap[0])*8);
     static_assert(max_map_height <= sizeof(m_body_bitmap[0])*8);
@@ -31,50 +29,46 @@ Fnake::Fnake()
 void
 Fnake::Start()
 {
+    m_game_status = game_resume;
     m_dt_remaining_seconds = 0.0f;
     m_tlast_milliseconds = SDL_GetTicks();
 
     m_direction = right;
     m_last_advanced_direction = right;
 
-    m_map_width = m_starting_map_width;
-    m_map_height = m_starting_map_height;
+    m_map_width = 12;
+    m_map_height = 10;
     assert(m_map_width <= max_map_width);
     assert(m_map_height <= max_map_height);
 
-    m_tail = 0;
-    m_head = 1;
+    memset(m_body_bitmap, 0, sizeof(m_body_bitmap));
 
     int32_t head_x = m_map_width / 2;
     int32_t head_y = m_map_height / 2;
-    m_body_positions[0] = {head_x -1, head_y};
-    m_body_positions[1] = {head_x, head_y};
-    memset(m_body_bitmap, 0, sizeof(m_body_bitmap));
+    m_body_positions.clear();
+    m_body_positions.emplace_front(head_x-1, head_y);
+    m_body_positions.emplace_front(head_x, head_y);
 
-    m_dist = std::uniform_int_distribution<int32_t>(0, m_map_width*m_map_height - 3);
     SpawnFood();
 
     m_score = 0;
-
-    m_game_status = game_resume;
 }
 
 void
 Fnake::Update(float dt)
 {
-    MaybeMoveFnake(dt);
+    MaybeMoveBody(dt);
 }
 
 void
-Fnake::MaybeMoveFnake(float dt)
+Fnake::MaybeMoveBody(float dt)
 {
     float seconds_per_tile = 1.0f / tiles_per_second;
     while (dt > seconds_per_tile) {
-        V2I32 head_pos = m_body_positions[m_head];
-        V2I32 tail_pos = m_body_positions[m_tail];
+        V2I32 head_pos = m_body_positions.front();
+        V2I32 tail_pos = m_body_positions.back();
 
-
-        // find head_pos
+        // find next head_pos
         if (m_direction == up) {
             head_pos.y += 1;
         }
@@ -93,6 +87,8 @@ Fnake::MaybeMoveFnake(float dt)
             HandleGameOver();
             return;
         }
+
+        // check collision
         uint64_t head_bit = 1 << head_pos.x;
         uint64_t body_bits = m_body_bitmap[head_pos.y];
         if (head_pos.y == tail_pos.y) {
@@ -103,38 +99,25 @@ Fnake::MaybeMoveFnake(float dt)
             return;
         }
 
-
         // advance head
-        int32_t max_positions = ARRAY_COUNT(m_body_positions);
-        m_head += 1;
-        if (m_head >= max_positions) {
-            m_head = 0;
-        }
-
-        m_body_positions[m_head] = head_pos;
         m_body_bitmap[head_pos.y] |= (1 << head_pos.x);
+        m_body_positions.emplace_front(head_pos);
 
-
-        if (m_body_positions[m_head] == m_food_position) {
+        if (m_body_positions.front() == m_food_position) {
+            // eat food
             m_score += 1;
             SpawnFood();
         }
         else {
             // advance tail
-            V2I32 next_tail_pos = m_body_positions[m_tail];
-            m_body_bitmap[next_tail_pos.y] &= (uint32_t)~(1 << next_tail_pos.x);
-
-            m_tail += 1;
-            if (m_tail >= max_positions) {
-                m_tail = 0;
-            }
+            m_body_bitmap[tail_pos.y] &= (uint32_t)~(1 << tail_pos.x);
+            m_body_positions.pop_back();
         }
 
 
         m_last_advanced_direction = m_direction;
         dt -= seconds_per_tile;
     }
-
 
     m_dt_remaining_seconds = dt;
 }
@@ -222,7 +205,7 @@ Fnake::SpawnFood()
     }
 
     m_dist.param(std::uniform_int_distribution<int32_t>::param_type(0, bit0_count_total - 1));
-    int32_t bit0_index = m_dist(s_rng);
+    int32_t bit0_index = m_dist(m_rng);
     int32_t bit0_x = 0;
     int32_t bit0_y = 0;
 
@@ -260,7 +243,6 @@ Fnake::Draw()
 
     float bodypart_size = 0.8f * tile_size;
     float bodypart_offset = (tile_size - bodypart_size) / 2;
-    int32_t max_bodypart_count = ARRAY_COUNT(m_body_positions);
 
     float map_width = tile_size * (float)m_map_width;
     float map_height = tile_size * (float)m_map_height;
@@ -276,7 +258,7 @@ Fnake::Draw()
     Color color_bg    = {0.0f, 0.0f, 0.0f, 1.0f};
 
 
-    /* draw map background */
+    // draw map background
     Rectangle map_world_rect = {
         map_x,
         map_y,
@@ -286,33 +268,10 @@ Fnake::Draw()
     g_renderer.PushRectangle(map_world_rect, color_bg, z_bg);
 
 
-    /* draw fnake */
-    // 1) if tail > head: advance to end first
-    int32_t tail = m_tail;
-    if (tail > m_head) {
-        while (tail < max_bodypart_count) {
-            float xoff = (float)m_body_positions[tail].x * tile_size + bodypart_offset;
-            float yoff = (float)m_body_positions[tail].y * tile_size + bodypart_offset;
-
-            float x = map_x + xoff;
-            float y = map_y + yoff;
-
-            Rectangle rect = {
-                x,
-                y,
-                x + bodypart_size,
-                y + bodypart_size
-            };
-
-            g_renderer.PushRectangle(rect, color_fnake, z_fnake);
-            tail++;
-        }
-        tail = 0;
-    }
-    // 2) advance to head
-    while (tail <= m_head) {
-        float xoff = (float)m_body_positions[tail].x * tile_size + bodypart_offset;
-        float yoff = (float)m_body_positions[tail].y * tile_size + bodypart_offset;
+    // draw body
+    for (auto it = m_body_positions.begin(); it != m_body_positions.end(); it++) {
+        float xoff = (float)it->x * tile_size + bodypart_offset;
+        float yoff = (float)it->y * tile_size + bodypart_offset;
 
         float x = map_x + xoff;
         float y = map_y + yoff;
@@ -325,11 +284,10 @@ Fnake::Draw()
         };
 
         g_renderer.PushRectangle(rect, color_fnake, z_fnake);
-        tail++;
     }
 
 
-    /* draw food */
+    // draw food
     float food_x = map_x + (float)m_food_position.x * tile_size + bodypart_offset;
     float food_y = map_y + (float)m_food_position.y * tile_size + bodypart_offset;
     Rectangle rect = {
@@ -341,7 +299,7 @@ Fnake::Draw()
     g_renderer.PushRectangle(rect, color_food, z_food);
 
 
-    /* draw scores */
+    // draw scores
     String32Id score_label = MemoryManager::EmplaceString32_Frame(U"Score");
     String32Id score_value = MemoryManager::EmplaceString32_Frame(int32_to_u32string(m_score));
 
