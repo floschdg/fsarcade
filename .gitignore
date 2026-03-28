@@ -1,0 +1,8 @@
+.cache
+build
+fsarcade
+runtree/fsarcade
+runtree/fetris_highscore.txt
+runtree/fnake_highscore.txt
+compile_commands.json
+
