@@ -160,15 +160,8 @@ Freakout::MoveBall(float dt)
 void
 Freakout::Draw()
 {
-    // Todo: draw a circle
-    Rectangle ball_rectangle = {
-        m_ball.circle.x - m_ball.circle.r,
-        m_ball.circle.y - m_ball.circle.r,
-        m_ball.circle.x + m_ball.circle.r,
-        m_ball.circle.y + m_ball.circle.r
-    };
     Color ball_color = {0.3f, 0.5f, 0.3f, 1.0f};
-    g_renderer.PushRectangle(ball_rectangle, ball_color, z_layer2);
+    g_renderer.PushCircle(m_ball.circle, ball_color, z_layer2);
 
 
     Color paddle_color = {0.6f, 0.3f, 0.3f, 1.0f};
