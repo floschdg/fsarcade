@@ -230,7 +230,7 @@ Fetris::DrawLineCounter()
     line_count /= 10;
 
 
-    g_renderer.PushString32(str_id, m_font, pos, color, z_text);
+    g_renderer.PushString32(str_id, m_font, pos, color, k_z_text);
     pos.x += 0.2f;
 }
 
@@ -242,7 +242,7 @@ Fetris::DrawStatistics()
 
     String32Id title_text = MemoryManager::EmplaceString32_Frame(U"Statistics");
     V2F32 title_pos = {pos.x + 0.02f, pos.y + 1.64f};
-    g_renderer.PushString32(title_text, m_font, title_pos, k_text_color, z_text);
+    g_renderer.PushString32(title_text, m_font, title_pos, k_text_color, k_z_text);
 
     float yadvance = -0.2f;
     float fetrominoes_x0 = pos.x;
@@ -286,19 +286,19 @@ Fetris::DrawStatistics()
     String32Id l_count = MemoryManager::EmplaceString32_Frame(int32_to_u32string(m_fetromino_counters[Fetromino::l_piece]));
     String32Id i_count = MemoryManager::EmplaceString32_Frame(int32_to_u32string(m_fetromino_counters[Fetromino::i_piece]));
 
-    g_renderer.PushString32(t_count, m_font, counters_pos, k_text_color, z_text);
+    g_renderer.PushString32(t_count, m_font, counters_pos, k_text_color, k_z_text);
     counters_pos.y += yadvance;
-    g_renderer.PushString32(j_count, m_font, counters_pos, k_text_color, z_text);
+    g_renderer.PushString32(j_count, m_font, counters_pos, k_text_color, k_z_text);
     counters_pos.y += yadvance;
-    g_renderer.PushString32(z_count, m_font, counters_pos, k_text_color, z_text);
+    g_renderer.PushString32(z_count, m_font, counters_pos, k_text_color, k_z_text);
     counters_pos.y += yadvance;
-    g_renderer.PushString32(o_count, m_font, counters_pos, k_text_color, z_text);
+    g_renderer.PushString32(o_count, m_font, counters_pos, k_text_color, k_z_text);
     counters_pos.y += yadvance;
-    g_renderer.PushString32(s_count, m_font, counters_pos, k_text_color, z_text);
+    g_renderer.PushString32(s_count, m_font, counters_pos, k_text_color, k_z_text);
     counters_pos.y += yadvance;
-    g_renderer.PushString32(l_count, m_font, counters_pos, k_text_color, z_text);
+    g_renderer.PushString32(l_count, m_font, counters_pos, k_text_color, k_z_text);
     counters_pos.y += yadvance;
-    g_renderer.PushString32(i_count, m_font, counters_pos, k_text_color, z_text);
+    g_renderer.PushString32(i_count, m_font, counters_pos, k_text_color, k_z_text);
 }
 
 void
@@ -314,14 +314,14 @@ Fetris::DrawScore()
     String32Id score_value = MemoryManager::EmplaceString32_Frame(int32_to_u32string(m_score));
 
 
-    g_renderer.PushString32(top_label, m_font, pos, k_text_color, z_text);
+    g_renderer.PushString32(top_label, m_font, pos, k_text_color, k_z_text);
     pos.y -= 0.1f;
-    g_renderer.PushString32(top_value, m_font, pos, k_text_color, z_text);
+    g_renderer.PushString32(top_value, m_font, pos, k_text_color, k_z_text);
     pos.y -= 0.2f;
 
-    g_renderer.PushString32(score_label, m_font, pos, k_text_color, z_text);
+    g_renderer.PushString32(score_label, m_font, pos, k_text_color, k_z_text);
     pos.y -= 0.1f;
-    g_renderer.PushString32(score_value, m_font, pos, k_text_color, z_text);
+    g_renderer.PushString32(score_value, m_font, pos, k_text_color, k_z_text);
 }
 
 void
@@ -332,7 +332,7 @@ Fetris::DrawNextFetromino()
 
     V2F32 label_pos = {pos.x, pos.y + 0.4f};
     String32Id label_text = MemoryManager::EmplaceString32_Frame(U"Next:");
-    g_renderer.PushString32(label_text, m_font, label_pos, k_text_color, z_layer1);
+    g_renderer.PushString32(label_text, m_font, label_pos, k_text_color, k_z_text);
 
 
     V2F32 fetromino_pos = {pos.x, pos.y};
@@ -345,10 +345,10 @@ Fetris::DrawLevel()
     V2F32 pos = {3.0f, 1.1f};
 
     String32Id label = MemoryManager::EmplaceString32_Frame(U"Level");
-    g_renderer.PushString32(label, m_font, pos, k_text_color, z_text);
+    g_renderer.PushString32(label, m_font, pos, k_text_color, k_z_text);
     pos.y -= 0.1f;
 
     String32Id level = MemoryManager::EmplaceString32_Frame(int32_to_u32string(m_level));
-    g_renderer.PushString32(level, m_font, pos, k_text_color, z_text);
+    g_renderer.PushString32(level, m_font, pos, k_text_color, k_z_text);
 }
 

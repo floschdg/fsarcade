@@ -1,21 +1,26 @@
 #include "games/fnake/Fnake.hpp"
+#include "common/shapes.hpp"
 #include "games/Game.hpp"
 #include "renderer/Renderer.hpp"
 #include "common/MemoryManager.hpp"
 #include "common/math.hpp"
+#include "common/Tilemap.hpp"
 
 #include <imgui.h>
 
 #include <cstdint>
 #include <fstream>
+#include <iostream>
+#include <iterator>
 
 
 Fnake::Fnake()
     : m_font {k_dejavu_sans_mono_filepath, 22}
     , m_rng {std::random_device{}()}
+    , m_tilemap {{k_tilemap_x, k_tilemap_y}, k_tile_size, k_tiles_x, k_tiles_y}
 {
-    static_assert(k_max_map_width <= sizeof(m_body_bitmap[0])*8);
-    static_assert(k_max_map_height <= sizeof(m_body_bitmap[0])*8);
+    static_assert(k_tiles_x <= sizeof(m_body_bitmap[0])*8);
+    static_assert(k_tiles_y <= sizeof(m_body_bitmap[0])*8);
 
     int32_t highscore = 0;
     std::ifstream highscore_file_in {"fnake_highscore.txt"};
@@ -30,24 +35,19 @@ void
 Fnake::Start()
 {
     m_game_status = game_resume;
-    m_dt_remaining_seconds = 0.0f;
     m_tlast_milliseconds = SDL_GetTicks();
 
-    m_direction = right;
-    m_last_advanced_direction = right;
-
-    m_map_width = 12;
-    m_map_height = 10;
-    assert(m_map_width <= k_max_map_width);
-    assert(m_map_height <= k_max_map_height);
+    m_curr_direction = right;
+    m_next_direction = right;
+    m_tile_progress = 0.0f;
 
     memset(m_body_bitmap, 0, sizeof(m_body_bitmap));
 
-    int32_t head_x = m_map_width / 2;
-    int32_t head_y = m_map_height / 2;
-    m_body_positions.clear();
-    m_body_positions.emplace_front(head_x-1, head_y);
-    m_body_positions.emplace_front(head_x, head_y);
+    int32_t head_x = k_tiles_x / 2;
+    int32_t head_y = k_tiles_y / 2;
+    m_body_parts.clear();
+    m_body_parts.emplace_front(V2I32{head_x-1, head_y}, right, none);
+    m_body_parts.emplace_front(V2I32{head_x, head_y}, none, left);
 
     SpawnFood();
 
@@ -57,36 +57,38 @@ Fnake::Start()
 void
 Fnake::Update(float dt)
 {
-    MaybeMoveBody(dt);
+    MoveBody(dt);
 }
 
 void
-Fnake::MaybeMoveBody(float dt)
+Fnake::MoveBody(float dt)
 {
-    float seconds_per_tile = 1.0f / k_tiles_per_second;
-    while (dt > seconds_per_tile) {
-        V2I32 head_pos = m_body_positions.front();
-        V2I32 tail_pos = m_body_positions.back();
+    float tile_progress = m_tile_progress + k_tiles_per_second * dt;
+    while (tile_progress >= 1.0f) {
+        V2I32 head_pos = m_body_parts.front().tile_pos;
+        V2I32 tail_pos = m_body_parts.back().tile_pos;
+
 
         // find next head_pos
-        if (m_direction == up) {
+        if (m_next_direction == up) {
             head_pos.y += 1;
         }
-        else if (m_direction == down) {
+        else if (m_next_direction == down) {
             head_pos.y -= 1;
         }
-        else if (m_direction == right) {
+        else if (m_next_direction == right) {
             head_pos.x += 1;
         }
-        else if (m_direction == left) {
+        else if (m_next_direction == left) {
             head_pos.x -= 1;
         }
-        if ((head_pos.x < 0 || head_pos.x >= m_map_width) ||
-            (head_pos.y < 0 || head_pos.y >= m_map_height))
+        if ((head_pos.x < 0 || head_pos.x >= k_tiles_x) ||
+            (head_pos.y < 0 || head_pos.y >= k_tiles_y))
         {
             HandleGameOver();
             return;
         }
+
 
         // check collision
         uint64_t head_bit = 1 << head_pos.x;
@@ -99,11 +101,15 @@ Fnake::MaybeMoveBody(float dt)
             return;
         }
 
+
         // advance head
         m_body_bitmap[head_pos.y] |= (1 << head_pos.x);
-        m_body_positions.emplace_front(head_pos);
+        m_body_parts.front().next_direction_to_head = m_next_direction;
+        m_body_parts.emplace_front(head_pos, none, (Direction)-m_next_direction);
 
-        if (m_body_positions.front() == m_food_position) {
+
+        // eat food or advance tail
+        if (m_body_parts.front().tile_pos == m_food_tile_pos) {
             // eat food
             m_score += 1;
             SpawnFood();
@@ -111,15 +117,16 @@ Fnake::MaybeMoveBody(float dt)
         else {
             // advance tail
             m_body_bitmap[tail_pos.y] &= (uint32_t)~(1 << tail_pos.x);
-            m_body_positions.pop_back();
+            m_body_parts.pop_back();
+            m_body_parts.back().next_direction_to_tail = none;
         }
 
 
-        m_last_advanced_direction = m_direction;
-        dt -= seconds_per_tile;
+        m_curr_direction = m_next_direction;
+        tile_progress -= 1.0f;
     }
 
-    m_dt_remaining_seconds = dt;
+    m_tile_progress = tile_progress;
 }
 
 void
@@ -146,31 +153,31 @@ Fnake::ProcessEvent(SDL_Event& event)
     switch (event.type) {
     case SDL_EVENT_KEY_DOWN: {
         if (event.key.key == SDLK_UP) {
-            if (m_last_advanced_direction == right ||
-                m_last_advanced_direction == left)
+            if (m_curr_direction == right ||
+                m_curr_direction == left)
             {
-                m_direction = up;
+                m_next_direction = up;
             }
         }
         else if (event.key.key == SDLK_DOWN) {
-            if (m_last_advanced_direction == right ||
-                m_last_advanced_direction == left)
+            if (m_curr_direction == right ||
+                m_curr_direction == left)
             {
-                m_direction = down;
+                m_next_direction = down;
             }
         }
         else if (event.key.key == SDLK_RIGHT) {
-            if (m_last_advanced_direction == up ||
-                m_last_advanced_direction == down)
+            if (m_curr_direction == up ||
+                m_curr_direction == down)
             {
-                m_direction = right;
+                m_next_direction = right;
             }
         }
         else if (event.key.key == SDLK_LEFT) {
-            if (m_last_advanced_direction == up ||
-                m_last_advanced_direction == down)
+            if (m_curr_direction == up ||
+                m_curr_direction == down)
             {
-                m_direction = left;
+                m_next_direction = left;
             }
         }
     }
@@ -182,11 +189,11 @@ Fnake::ProcessEvent(SDL_Event& event)
 void
 Fnake::SpawnFood()
 {
-    int32_t bit0_counts[k_max_map_height];
+    int32_t bit0_counts[k_tiles_y];
     int32_t bit0_count_total = 0;
 
     // count bits
-    for (int32_t y = 0; y < m_map_height; y++) {
+    for (int32_t y = 0; y < k_tiles_y; y++) {
         int32_t bit1_count = 0;
 
         uint64_t bitmap_row = m_body_bitmap[y];
@@ -195,7 +202,7 @@ Fnake::SpawnFood()
             bit1_count += 1;
         }
 
-        int32_t bit0_count = m_map_width - bit1_count;
+        int32_t bit0_count = k_tiles_x - bit1_count;
         bit0_counts[y] = bit0_count;
         bit0_count_total += bit0_count;
     }
@@ -210,7 +217,7 @@ Fnake::SpawnFood()
     int32_t bit0_y = 0;
 
     // find y
-    for (int32_t y = 0; y < m_map_height; y++) {
+    for (int32_t y = 0; y < k_tiles_y; y++) {
         if (bit0_index < bit0_counts[y]) {
             bit0_y = y;
             break;
@@ -220,7 +227,7 @@ Fnake::SpawnFood()
 
     // find x
     uint64_t bitmap_row_not = ~m_body_bitmap[bit0_y];
-    for (int32_t x = 0; x < m_map_width; x++) {
+    for (int32_t x = 0; x < k_tiles_x; x++) {
         if (bitmap_row_not & 1) {
             if (bit0_index == 0) {
                 bit0_x = x;
@@ -231,75 +238,151 @@ Fnake::SpawnFood()
         bitmap_row_not >>= 1;
     }
 
-    m_food_position = {bit0_x, bit0_y};
+    m_food_tile_pos = {bit0_x, bit0_y};
 }
 
 void
 Fnake::Draw()
 {
-    float world_width = 4.0f;
-    float world_height = 3.0f;
-    float tile_size = (world_width / 2) / k_max_map_width;
-
-    float bodypart_size = 0.8f * tile_size;
-    float bodypart_offset = (tile_size - bodypart_size) / 2;
-
-    float map_width = tile_size * (float)m_map_width;
-    float map_height = tile_size * (float)m_map_height;
-    float map_x = (world_width - map_width) / 2;
-    float map_y = (world_height - map_height) / 2;
-
-    uint32_t z_bg = z_layer1;
-    uint32_t z_food = z_layer2;
-    uint32_t z_fnake = z_layer3;
-
-    Color color_fnake = {0.0f, 0.5f, 0.0f, 1.0f};
-    Color color_food  = {0.5f, 0.0f, 0.0f, 1.0f};
-    Color color_bg    = {0.0f, 0.0f, 0.0f, 1.0f};
-
-
-    // draw map background
-    Rectangle map_world_rect = {
-        map_x,
-        map_y,
-        map_x + map_width,
-        map_y + map_height
+    Color tilemap_color = {0.0f, 0.0f, 0.0f, 1.0f};
+    Rectangle tilemap_rect = {
+        m_tilemap.m_pos.x,
+        m_tilemap.m_pos.y,
+        m_tilemap.m_pos.x + m_tilemap.m_dim.x,
+        m_tilemap.m_pos.y + m_tilemap.m_dim.y,
     };
-    g_renderer.PushRectangle(map_world_rect, color_bg, z_bg);
+    g_renderer.PushRectangle(tilemap_rect, tilemap_color, k_z_tilemap);
 
 
-    // draw body
-    for (auto it = m_body_positions.begin(); it != m_body_positions.end(); it++) {
-        float xoff = (float)it->x * tile_size + bodypart_offset;
-        float yoff = (float)it->y * tile_size + bodypart_offset;
+    DrawFood();
+    DrawBody();
+}
 
-        float x = map_x + xoff;
-        float y = map_y + yoff;
+static Rectangle
+rect_towards_direction(Rectangle origin, Fnake::Direction direction, float x, float y, float tile_size)
+{
+    Rectangle rect;
+    if (direction == Fnake::up) {
+        rect.x0 = origin.x0;
+        rect.x1 = origin.x1;
+        rect.y0 = origin.y1;
+        rect.y1 = y + tile_size;
+    }
+    else if (direction == Fnake::down) {
+        rect.x0 = origin.x0;
+        rect.x1 = origin.x1;
+        rect.y0 = y;
+        rect.y1 = origin.y0;
+    }
+    else if (direction == Fnake::right) {
+        rect.x0 = origin.x1;
+        rect.x1 = x + tile_size;
+        rect.y0 = origin.y0;
+        rect.y1 = origin.y1;
+    }
+    else if (direction == Fnake::left) {
+        rect.x0 = x;
+        rect.x1 = origin.x0;
+        rect.y0 = origin.y0;
+        rect.y1 = origin.y1;
+    }
+    return rect;
+}
 
+void
+Fnake::DrawBody()
+{
+    Color body_color = {0.0f, 0.5f, 0.0f, 1.0f};
+    float bodypart_size = 0.8f * k_tile_size;
+    float bodypart_offset = (k_tile_size - bodypart_size) / 2;
+
+
+    // draw head
+    auto curr = m_body_parts.begin();
+    {
+        float x = m_tilemap.WorldX(curr->tile_pos.x);
+        float y = m_tilemap.WorldY(curr->tile_pos.y);
         Rectangle rect = {
-            x,
-            y,
-            x + bodypart_size,
-            y + bodypart_size
+            x + bodypart_offset,
+            y + bodypart_offset,
+            rect.x0 + bodypart_size,
+            rect.y0 + bodypart_size
         };
 
-        g_renderer.PushRectangle(rect, color_fnake, z_fnake);
+        if (curr->next_direction_to_tail == up) {
+            rect.y0 += bodypart_size * (1-m_tile_progress);
+            rect.y1 = y + k_tile_size;
+        }
+        else if (curr->next_direction_to_tail == down) {
+            rect.y0 = y;
+            rect.y1 -= bodypart_size * (1-m_tile_progress);
+        }
+        else if (curr->next_direction_to_tail == right) {
+            rect.x0 += bodypart_size * (1-m_tile_progress);
+            rect.x1 = x + k_tile_size;
+        }
+        else if (curr->next_direction_to_tail == left) {
+            rect.x0 = x;
+            rect.x1 -= bodypart_size * (1-m_tile_progress);
+        }
+        g_renderer.PushRectangle(rect, body_color, k_z_body);
     }
 
 
-    // draw food
-    float food_x = map_x + (float)m_food_position.x * tile_size + bodypart_offset;
-    float food_y = map_y + (float)m_food_position.y * tile_size + bodypart_offset;
+    // draw remaining body
+    curr++;
+    auto next = curr + 1;
+    while (curr != m_body_parts.end()) {
+        float x = m_tilemap.WorldX(curr->tile_pos.x);
+        float y = m_tilemap.WorldY(curr->tile_pos.y);
+
+
+        Rectangle rect = {
+            x + bodypart_offset,
+            y + bodypart_offset,
+            rect.x0 + bodypart_size,
+            rect.y0 + bodypart_size
+        };
+        g_renderer.PushRectangle(rect, body_color, k_z_body);
+
+
+        Direction next_direction_to_head = curr->next_direction_to_head;
+        Rectangle rect_to_head = rect_towards_direction(rect, next_direction_to_head, x, y, k_tile_size);
+        g_renderer.PushRectangle(rect_to_head, body_color, k_z_body);
+
+
+        Direction next_direction_to_tail = curr->next_direction_to_tail;
+        Rectangle rect_to_tail = rect_towards_direction(rect, next_direction_to_tail, x, y, k_tile_size);
+        g_renderer.PushRectangle(rect_to_tail, body_color, k_z_body);
+
+
+        curr = next;
+        next = next + 1;
+    }
+}
+
+void
+Fnake::DrawFood()
+{
+    float bodypart_size = 0.8f * k_tile_size;
+    float bodypart_offset = (k_tile_size - bodypart_size) / 2;
+
+    Color food_color = {0.5f, 0.0f, 0.0f, 1.0f};
+    float food_x = m_tilemap.WorldX(m_food_tile_pos.x);
+    float food_y = m_tilemap.WorldY(m_food_tile_pos.y);
+
     Rectangle rect = {
-        food_x,
-        food_y,
-        food_x + bodypart_size,
-        food_y + bodypart_size
+        food_x + bodypart_offset,
+        food_y + bodypart_offset,
+        rect.x0 + bodypart_size,
+        rect.y0 + bodypart_size
     };
-    g_renderer.PushRectangle(rect, color_food, z_food);
+    g_renderer.PushRectangle(rect, food_color, k_z_food);
+}
 
-
-    // draw scores
+void
+Fnake::DrawScores()
+{
     String32Id score_label = MemoryManager::EmplaceString32_Frame(U"Score");
     String32Id score_value = MemoryManager::EmplaceString32_Frame(int32_to_u32string(m_score));
 
@@ -311,12 +394,12 @@ Fnake::Draw()
     V2F32 highscore_pos = {2.3f, 2.5f};
     Color anyscore_color {0.9f, 0.9f, 0.9f, 1.0f};
 
-    g_renderer.PushString32(highscore_label, m_font, highscore_pos, anyscore_color, z_text);
+    g_renderer.PushString32(highscore_label, m_font, highscore_pos, anyscore_color, k_z_text);
     highscore_pos.y -= 0.1f;
-    g_renderer.PushString32(highscore_value, m_font, highscore_pos, anyscore_color, z_text);
+    g_renderer.PushString32(highscore_value, m_font, highscore_pos, anyscore_color, k_z_text);
 
-    g_renderer.PushString32(score_label, m_font, score_pos, anyscore_color, z_text);
+    g_renderer.PushString32(score_label, m_font, score_pos, anyscore_color, k_z_text);
     score_pos.y -= 0.1f;
-    g_renderer.PushString32(score_value, m_font, score_pos, anyscore_color, z_text);
+    g_renderer.PushString32(score_value, m_font, score_pos, anyscore_color, k_z_text);
 }
 

@@ -16,6 +16,11 @@ class Freakout : public Game {
         float dy;
     };
 
+    static constexpr uint32_t k_z_bg = 0;
+    static constexpr uint32_t k_z_paddle = 1;
+    static constexpr uint32_t k_z_brick = 1;
+    static constexpr uint32_t k_z_ball = 2;
+
     static constexpr float k_map_w = 4.0f;
     static constexpr float k_map_h = 3.0f;
 

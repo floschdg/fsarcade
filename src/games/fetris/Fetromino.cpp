@@ -1,5 +1,5 @@
 #include "games/fetris/Fetromino.hpp"
-#include "games/Game.hpp"
+#include "games/fetris/Fetris.hpp"
 #include "renderer/Renderer.hpp"
 
 #include <random>
@@ -233,7 +233,7 @@ Fetromino::Draw(Id id, int32_t ori, V2F32 pos, float scale)
 
 
                 Color color = GetColor(id);
-                g_renderer.PushRectangle(world_rect, color, Game::z_layer2);
+                g_renderer.PushRectangle(world_rect, color, Fetris::k_z_fetromino);
             }
         }
     }

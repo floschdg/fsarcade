@@ -161,7 +161,7 @@ void
 Freakout::Draw()
 {
     Color ball_color = {0.3f, 0.5f, 0.3f, 1.0f};
-    g_renderer.PushCircle(m_ball.circle, ball_color, z_layer2);
+    g_renderer.PushCircle(m_ball.circle, ball_color, k_z_ball);
 
 
     Color paddle_color = {0.6f, 0.3f, 0.3f, 1.0f};
@@ -171,13 +171,13 @@ Freakout::Draw()
         m_paddle.x + k_paddle_w,
         k_paddle_h
     };
-    g_renderer.PushRectangle(paddle_rect, paddle_color, z_layer1);
+    g_renderer.PushRectangle(paddle_rect, paddle_color, k_z_paddle);
 
 
     Color brick_color = {0.5f, 0.3f, 0.3f, 1.0f};
     for (uint32_t y = 0; y < k_brick_rows; y++) {
         for (uint32_t x = 0; x < k_brick_cols; x++) {
-            g_renderer.PushRectangle(m_bricks[y][x], brick_color, z_layer1);
+            g_renderer.PushRectangle(m_bricks[y][x], brick_color, k_z_brick);
         }
     }
 }

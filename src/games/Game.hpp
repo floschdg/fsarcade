@@ -27,12 +27,6 @@ public:
         game_exit
     };
 
-    enum ZLayer {
-        z_layer1 = 1,
-        z_layer2,
-        z_layer3,
-        z_text
-    };
 
     using FrameString32 = uint32_t;
 

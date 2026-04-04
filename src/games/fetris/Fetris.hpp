@@ -11,6 +11,13 @@ public:
     Fetris();
 
 
+public:
+    static constexpr uint32_t k_z_bg = 0;
+    static constexpr uint32_t k_z_board = 1;
+    static constexpr uint32_t k_z_fetromino = 2;
+    static constexpr uint32_t k_z_text = 3;
+
+
 private:
     void Start() override;
     void ProcessEvent(SDL_Event& event) override;

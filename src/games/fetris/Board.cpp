@@ -1,6 +1,6 @@
+#include "games/fetris/Fetris.hpp"
 #include "games/fetris/Board.hpp"
 #include "games/fetris/Fetromino.hpp"
-#include "games/Game.hpp"
 #include "renderer/Renderer.hpp"
 
 void
@@ -115,7 +115,7 @@ Board::Draw(int32_t level)
         bg_world_pos.y + bg_world_dim.y,
     };
     Color bg_color = {0.0f, 0.0f, 0.0f, 1.0f};
-    g_renderer.PushRectangle(bg_world_rect, bg_color, Game::z_layer1);
+    g_renderer.PushRectangle(bg_world_rect, bg_color, Fetris::k_z_bg);
 
 
     // fetromino parts
@@ -145,7 +145,7 @@ Board::Draw(int32_t level)
 
 
                 Color color = Fetromino::GetColor(fetromino_id);
-                g_renderer.PushRectangle(world_rect, color, Game::z_layer2);
+                g_renderer.PushRectangle(world_rect, color, Fetris::k_z_fetromino);
             }
         }
     }

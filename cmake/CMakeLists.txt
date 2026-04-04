@@ -38,6 +38,7 @@ target_sources(fsarcade PUBLIC
     ${FSARCADE_SRC_DIR}/common/math.cpp
     ${FSARCADE_SRC_DIR}/common/Font.cpp
     ${FSARCADE_SRC_DIR}/common/MemoryManager.cpp
+    ${FSARCADE_SRC_DIR}/common/Tilemap.cpp
     ${FSARCADE_SRC_DIR}/renderer/Renderer.cpp
     ${FSARCADE_SRC_DIR}/renderer/RSoftwareBackend.cpp
     ${FSARCADE_SRC_DIR}/games/Game.cpp

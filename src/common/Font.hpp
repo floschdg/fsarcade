@@ -1,8 +1,9 @@
 #pragma once
 
-#include <stb_truetype.h>
-
+#include <stdint.h>
 #include <memory>
+
+#include <stb_truetype.h>
 
 
 struct AlphaBitmap {
