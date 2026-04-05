@@ -132,18 +132,18 @@ Fetris::HandleFetrominoPlacement()
 uint32_t
 Fetris::GetSoftdropCount(float dt)
 {
-    float nes_frame_time = 1.0f / 60;
-    int32_t nes_frames_per_cell;
-    if      (m_level <= 8)  nes_frames_per_cell = 48 - m_level * 5;
-    else if (m_level == 9)  nes_frames_per_cell = 6;
-    else if (m_level <= 12) nes_frames_per_cell = 5;
-    else if (m_level <= 15) nes_frames_per_cell = 4;
-    else if (m_level <= 18) nes_frames_per_cell = 3;
-    else if (m_level <= 28) nes_frames_per_cell = 2;
-    else                    nes_frames_per_cell = 1;
+    float frame_time = 1.0f / 60;
+    int32_t frames_per_cell;
+    if      (m_level <= 8)  frames_per_cell = 48 - m_level * 5;
+    else if (m_level == 9)  frames_per_cell = 6;
+    else if (m_level <= 12) frames_per_cell = 5;
+    else if (m_level <= 15) frames_per_cell = 4;
+    else if (m_level <= 18) frames_per_cell = 3;
+    else if (m_level <= 28) frames_per_cell = 2;
+    else                    frames_per_cell = 1;
 
 
-    float dt_level = static_cast<float>(nes_frames_per_cell) * nes_frame_time;
+    float dt_level = static_cast<float>(frames_per_cell) * frame_time;
 
     uint32_t softdrop_count = 0;
     while (dt > dt_level) {

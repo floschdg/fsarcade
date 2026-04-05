@@ -4,20 +4,17 @@
 #include "renderer/Renderer.hpp"
 #include "common/MemoryManager.hpp"
 #include "common/math.hpp"
-#include "common/Tilemap.hpp"
 
 #include <imgui.h>
 
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 
 
 Fnake::Fnake()
     : m_font {k_dejavu_sans_mono_filepath, 22}
     , m_rng {std::random_device{}()}
-    , m_tilemap {{k_tilemap_x, k_tilemap_y}, k_tile_size, k_tiles_x, k_tiles_y}
 {
     static_assert(k_tiles_x <= sizeof(m_body_bitmap[0])*8);
     static_assert(k_tiles_y <= sizeof(m_body_bitmap[0])*8);
@@ -246,47 +243,17 @@ Fnake::Draw()
 {
     Color tilemap_color = {0.0f, 0.0f, 0.0f, 1.0f};
     Rectangle tilemap_rect = {
-        m_tilemap.m_pos.x,
-        m_tilemap.m_pos.y,
-        m_tilemap.m_pos.x + m_tilemap.m_dim.x,
-        m_tilemap.m_pos.y + m_tilemap.m_dim.y,
+        k_tilemap_x,
+        k_tilemap_y,
+        k_tilemap_x + k_tile_size * k_tiles_x,
+        k_tilemap_y + k_tile_size * k_tiles_y
     };
     g_renderer.PushRectangle(tilemap_rect, tilemap_color, k_z_tilemap);
 
 
     DrawFood();
     DrawBody();
-}
-
-static Rectangle
-rect_towards_direction(Rectangle origin, Fnake::Direction direction, float x, float y, float tile_size)
-{
-    Rectangle rect;
-    if (direction == Fnake::up) {
-        rect.x0 = origin.x0;
-        rect.x1 = origin.x1;
-        rect.y0 = origin.y1;
-        rect.y1 = y + tile_size;
-    }
-    else if (direction == Fnake::down) {
-        rect.x0 = origin.x0;
-        rect.x1 = origin.x1;
-        rect.y0 = y;
-        rect.y1 = origin.y0;
-    }
-    else if (direction == Fnake::right) {
-        rect.x0 = origin.x1;
-        rect.x1 = x + tile_size;
-        rect.y0 = origin.y0;
-        rect.y1 = origin.y1;
-    }
-    else if (direction == Fnake::left) {
-        rect.x0 = x;
-        rect.x1 = origin.x0;
-        rect.y0 = origin.y0;
-        rect.y1 = origin.y1;
-    }
-    return rect;
+    DrawScores();
 }
 
 void
@@ -296,69 +263,143 @@ Fnake::DrawBody()
     float bodypart_size = 0.8f * k_tile_size;
     float bodypart_offset = (k_tile_size - bodypart_size) / 2;
 
+    auto curr = m_body_parts.begin();
+    auto next = curr + 1;
+
+    Rectangle rect_curr;
+    Rectangle rect_next;
+
 
     // draw head
-    auto curr = m_body_parts.begin();
     {
-        float x = m_tilemap.WorldX(curr->tile_pos.x);
-        float y = m_tilemap.WorldY(curr->tile_pos.y);
-        Rectangle rect = {
-            x + bodypart_offset,
-            y + bodypart_offset,
-            rect.x0 + bodypart_size,
-            rect.y0 + bodypart_size
+        float x0_next = TilemapXToWorldX(next->tile_pos.x) + bodypart_offset;
+        float y0_next = TilemapYToWorldY(next->tile_pos.y) + bodypart_offset;
+        rect_next = {
+            x0_next,
+            y0_next,
+            x0_next + bodypart_size,
+            y0_next + bodypart_size
         };
+        rect_curr = rect_next;
 
+        float progress_size = m_tile_progress * k_tile_size;
         if (curr->next_direction_to_tail == up) {
-            rect.y0 += bodypart_size * (1-m_tile_progress);
-            rect.y1 = y + k_tile_size;
+            rect_curr.y0 -= progress_size;
+            rect_curr.y1 -= progress_size;
+            if (rect_curr.y1 <= rect_next.y0) {
+                DrawBodyConnectionUp(rect_curr, rect_next.y0);
+            }
         }
         else if (curr->next_direction_to_tail == down) {
-            rect.y0 = y;
-            rect.y1 -= bodypart_size * (1-m_tile_progress);
+            rect_curr.y0 += progress_size;
+            rect_curr.y1 += progress_size;
+            if (rect_curr.y0 >= rect_next.y1) {
+                DrawBodyConnectionDown(rect_curr, rect_next.y1);
+            }
         }
         else if (curr->next_direction_to_tail == right) {
-            rect.x0 += bodypart_size * (1-m_tile_progress);
-            rect.x1 = x + k_tile_size;
+            rect_curr.x0 -= progress_size;
+            rect_curr.x1 -= progress_size;
+            if (rect_curr.x1 <= rect_next.x0) {
+                DrawBodyConnectionRight(rect_curr, rect_next.x0);
+            }
         }
         else if (curr->next_direction_to_tail == left) {
-            rect.x0 = x;
-            rect.x1 -= bodypart_size * (1-m_tile_progress);
+            rect_curr.x0 += progress_size;
+            rect_curr.x1 += progress_size;
+            if (rect_curr.x0 >= rect_next.x1) {
+                DrawBodyConnectionLeft(rect_curr, rect_next.x1);
+            }
         }
-        g_renderer.PushRectangle(rect, body_color, k_z_body);
+        g_renderer.PushRectangle(rect_curr, body_color, k_z_body);
     }
 
 
     // draw remaining body
-    curr++;
-    auto next = curr + 1;
+    curr = next;
+    next = next + 1;
+    rect_curr = rect_next;
     while (curr != m_body_parts.end()) {
-        float x = m_tilemap.WorldX(curr->tile_pos.x);
-        float y = m_tilemap.WorldY(curr->tile_pos.y);
+        g_renderer.PushRectangle(rect_curr, body_color, k_z_body);
 
 
-        Rectangle rect = {
-            x + bodypart_offset,
-            y + bodypart_offset,
-            rect.x0 + bodypart_size,
-            rect.y0 + bodypart_size
+        float x0_next = TilemapXToWorldX(next->tile_pos.x) + bodypart_offset;
+        float y0_next = TilemapYToWorldY(next->tile_pos.y) + bodypart_offset;
+        rect_next = {
+            x0_next,
+            y0_next,
+            x0_next + bodypart_size,
+            y0_next + bodypart_size
         };
-        g_renderer.PushRectangle(rect, body_color, k_z_body);
-
-
-        Direction next_direction_to_head = curr->next_direction_to_head;
-        Rectangle rect_to_head = rect_towards_direction(rect, next_direction_to_head, x, y, k_tile_size);
-        g_renderer.PushRectangle(rect_to_head, body_color, k_z_body);
 
 
         Direction next_direction_to_tail = curr->next_direction_to_tail;
-        Rectangle rect_to_tail = rect_towards_direction(rect, next_direction_to_tail, x, y, k_tile_size);
-        g_renderer.PushRectangle(rect_to_tail, body_color, k_z_body);
+        if (next_direction_to_tail == up) {
+            DrawBodyConnectionUp(rect_curr, rect_next.y0);
+        }
+        else if (next_direction_to_tail == down) {
+            DrawBodyConnectionDown(rect_curr, rect_next.y1);
+        }
+        else if (next_direction_to_tail == right) {
+            DrawBodyConnectionRight(rect_curr, rect_next.x0);
+        }
+        else if (next_direction_to_tail == left) {
+            DrawBodyConnectionLeft(rect_curr, rect_next.x1);
+        }
 
 
         curr = next;
         next = next + 1;
+        rect_curr = rect_next;
     }
+}
+
+void
+Fnake::DrawBodyConnectionUp(Rectangle rect_origin, float top_y0)
+{
+    Rectangle rect = {
+        rect_origin.x0,
+        rect_origin.y1,
+        rect_origin.x1,
+        top_y0
+    };
+    g_renderer.PushRectangle(rect, k_color_body, k_z_body);
+}
+
+void
+Fnake::DrawBodyConnectionDown(Rectangle rect_origin, float bot_y1)
+{
+    Rectangle rect = {
+        rect_origin.x0,
+        bot_y1,
+        rect_origin.x1,
+        rect_origin.y0
+    };
+    g_renderer.PushRectangle(rect, k_color_body, k_z_body);
+}
+
+void
+Fnake::DrawBodyConnectionRight(Rectangle rect_origin, float right_x0)
+{
+    Rectangle rect = {
+        rect_origin.x1,
+        rect_origin.y0,
+        right_x0,
+        rect_origin.y1
+    };
+    g_renderer.PushRectangle(rect, k_color_body, k_z_body);
+}
+
+void
+Fnake::DrawBodyConnectionLeft(Rectangle rect_origin, float left_x1)
+{
+    Rectangle rect = {
+        left_x1,
+        rect_origin.y0,
+        rect_origin.x0,
+        rect_origin.y1
+    };
+    g_renderer.PushRectangle(rect, k_color_body, k_z_body);
 }
 
 void
@@ -368,8 +409,8 @@ Fnake::DrawFood()
     float bodypart_offset = (k_tile_size - bodypart_size) / 2;
 
     Color food_color = {0.5f, 0.0f, 0.0f, 1.0f};
-    float food_x = m_tilemap.WorldX(m_food_tile_pos.x);
-    float food_y = m_tilemap.WorldY(m_food_tile_pos.y);
+    float food_x = TilemapXToWorldX(m_food_tile_pos.x);
+    float food_y = TilemapYToWorldY(m_food_tile_pos.y);
 
     Rectangle rect = {
         food_x + bodypart_offset,
@@ -390,8 +431,10 @@ Fnake::DrawScores()
     String32Id highscore_value = MemoryManager::EmplaceString32_Frame(int32_to_u32string(m_highscore));
 
 
-    V2F32 score_pos = {1.3f, 2.5f};
-    V2F32 highscore_pos = {2.3f, 2.5f};
+    float y = k_tilemap_y + k_tiles_y * k_tile_size + 0.75f * k_tile_size;
+    float x = k_tilemap_x + 0.5f * k_tile_size;
+    V2F32 score_pos = {x , y};
+    V2F32 highscore_pos = {x + 0.75f * (k_tiles_x * k_tile_size), y};
     Color anyscore_color {0.9f, 0.9f, 0.9f, 1.0f};
 
     g_renderer.PushString32(highscore_label, m_font, highscore_pos, anyscore_color, k_z_text);
@@ -401,5 +444,19 @@ Fnake::DrawScores()
     g_renderer.PushString32(score_label, m_font, score_pos, anyscore_color, k_z_text);
     score_pos.y -= 0.1f;
     g_renderer.PushString32(score_value, m_font, score_pos, anyscore_color, k_z_text);
+}
+
+float
+Fnake::TilemapXToWorldX(int32_t tile_x)
+{
+    float x = k_tilemap_x + (float)tile_x * k_tile_size;
+    return x;
+}
+
+float
+Fnake::TilemapYToWorldY(int32_t tile_y)
+{
+    float y = k_tilemap_y + (float)tile_y * k_tile_size;
+    return y;
 }
 
