@@ -1,4 +1,5 @@
 #include "common/MemoryManager.hpp"
+#include "common/Jobsys.hpp"
 #include "common/math.hpp"
 #include "renderer/Renderer.hpp"
 #include "renderer/RSoftwareBackend.hpp"
@@ -116,30 +117,100 @@ RSoftwareBackend::SortRenderEntities()
               });
 }
 
+struct DrawClearMultithreadedData {
+    uint8_t* pixel_row;
+    int row_count;
+    int pitch;
+    int row_chunk_count;
+    int row_chunk_rest;
+    uint32_t color_val;
+    __m256i color_vec;
+
+};
+
+static void
+DrawClearMultithreaded(void* _data)
+{
+    DrawClearMultithreadedData* data = (DrawClearMultithreadedData*)_data;
+    uint8_t* pixel_row = (uint8_t*)data->pixel_row;
+    for (uint32_t y = 0; y < data->row_count; y++) {
+        uint32_t *pixels = (uint32_t*)pixel_row;
+
+        for (int i = 0; i < data->row_chunk_count; i++) {
+            _mm256_store_si256((__m256i*)pixels, data->color_vec);
+            pixels += 8;
+        }
+        for (int i = 0; i < data->row_chunk_rest; i++) {
+            *pixels++ = data->color_val;
+        }
+
+        pixel_row += data->pitch;
+    }
+}
 void
 RSoftwareBackend::DrawClear()
 {
     Color color = m_renderer.m_clear_color;
-    uint32_t val = MapRGB(color.r, color.g, color.b);
-    __m256i vec_val = _mm256_set1_epi32((int32_t)val);
+    uint32_t color_val = MapRGB(color.r, color.g, color.b);
+    __m256i color_vec = _mm256_set1_epi32((int32_t)color_val);
     int row_chunk_count = m_surface->w / 8;
     int row_chunk_rest = m_surface->w % 8;
+    int pitch = m_surface->pitch;
 
+#if 1
+    uint8_t* pixel_row = (uint8_t*)m_surface->pixels;
+    int rows_per_job = m_surface->h / 4;
+    int rows_per_job_rest = m_surface->h % 4;
+    int rows_last_job = rows_per_job + rows_per_job_rest;
+    DrawClearMultithreadedData datas[] = {
+        {
+            pixel_row + (0 * m_surface->pitch * rows_per_job), rows_per_job, pitch,
+            row_chunk_count, row_chunk_rest, color_val, color_vec
+        },
+        {
+            pixel_row + (1 * m_surface->pitch * rows_per_job), rows_per_job, pitch,
+            row_chunk_count, row_chunk_rest, color_val, color_vec
+        },
+        {
+            pixel_row + (2 * m_surface->pitch * rows_per_job), rows_per_job, pitch,
+            row_chunk_count, row_chunk_rest, color_val, color_vec
+        },
+        {
+            pixel_row + (3 * m_surface->pitch * rows_per_job), rows_last_job, pitch,
+            row_chunk_count, row_chunk_rest, color_val, color_vec
+        },
+    };
+    Job jobs[] = {
+        {DrawClearMultithreaded, datas},
+        {DrawClearMultithreaded, datas+1},
+        {DrawClearMultithreaded, datas+2},
+        {DrawClearMultithreaded, datas+3},
+    };
+    g_jobsys->StartJob(jobs);
+    g_jobsys->StartJob(jobs+1);
+    g_jobsys->StartJob(jobs+2);
+    g_jobsys->StartJob(jobs+3);
 
+    g_jobsys->FinishJob(jobs);
+    g_jobsys->FinishJob(jobs+1);
+    g_jobsys->FinishJob(jobs+2);
+    g_jobsys->FinishJob(jobs+3);
+#else
     uint8_t* pixel_row = (uint8_t*)m_surface->pixels;
     for (uint32_t y = 0; y < m_surface->h; y++) {
         uint32_t *pixels = (uint32_t*)pixel_row;
 
         for (int i = 0; i < row_chunk_count; i++) {
-            _mm256_store_si256((__m256i*)pixels, vec_val);
+            _mm256_store_si256((__m256i*)pixels, color_vec);
             pixels += 8;
         }
         for (int i = 0; i < row_chunk_rest; i++) {
-            *pixels++ = val;
+            *pixels++ = color_val;
         }
 
-        pixel_row += m_surface->pitch;
+        pixel_row += pitch;
     }
+#endif
 }
 
 void
