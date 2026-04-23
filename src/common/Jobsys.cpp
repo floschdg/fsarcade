@@ -24,12 +24,10 @@ JobRunner(Jobsys* jobsys)
 
 Jobsys::Jobsys()
 {
-    uint32_t hardware_threads = std::min(4u, std::thread::hardware_concurrency());
-    for (uint32_t i = 0; i < hardware_threads; i++) {
-        std::thread t(JobRunner, this);
-        m_threads.emplace_back(std::move(t));
+    uint32_t threads = std::min(4u, std::thread::hardware_concurrency());
+    for (uint32_t i = 0; i < threads; i++) {
+        m_threads.emplace_back(JobRunner, this);
     }
-    printf("jobsys created with %u hardware_threads\n", hardware_threads);
 }
 
 void
