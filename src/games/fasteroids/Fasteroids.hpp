@@ -19,8 +19,20 @@ public:
     static constexpr uint32_t k_z_lazer = 3;
 
 private:
+    void MaybeSpawnAsteroid(float dt);
+    void DespawnDistantLazers();
+    void DespawnDistantAsteroids();
+
+private:
     Spaceship m_ship;
     std::vector<Asteroid> m_asteroids;
     std::vector<Lazer> m_lazers;
+
+    // Todo: Maybe use flags or bitset or sth. more memory-efficient later
+    bool m_is_boost_forward;
+    bool m_is_rotate_clockwise;
+    bool m_is_rotate_anticlockwise;
+
+    float m_asteroid_spawn_time_left;
 };
 

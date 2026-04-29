@@ -4,7 +4,6 @@
 #include <cmath>
 
 static constexpr float k_pi = static_cast<float>(std::numbers::pi);
-static constexpr float k_pi2 = k_pi*2;
 
 Asteroid::Asteroid()
 {
@@ -34,7 +33,7 @@ Asteroid::Asteroid()
         m_mesh.m_indices.push_back(indices[i]);
     }
 
-    m_pos = {0.5f, 0.5f};
+    m_pos = {-0.5f, -0.5f};
     m_speed = 0.01f;
     m_angle = -k_pi/8;
 }

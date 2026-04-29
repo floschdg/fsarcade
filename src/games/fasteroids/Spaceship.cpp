@@ -32,36 +32,46 @@ Spaceship::Spaceship()
         m_mesh.m_indices.push_back(indices[i]);
     }
 
+    Reset();
+}
+
+void
+Spaceship::Reset()
+{
     m_pos = {2.0f, 2.0f};
     m_angle = 0.0f;
 }
 
 void
-Spaceship::BoostForward()
+Spaceship::StartBoost()
 {
     m_speed_prop = 1.0f;
 }
 
 void
-Spaceship::RotateClockwise(float angle)
+Spaceship::RotateClockwise(float dt)
 {
-    m_angle -= angle;
+    float angle = m_angle + -k_rotation_factor*(dt * k_pi);
     while (angle < -k_pi2) {
-        m_angle += k_pi2;
+        angle += k_pi2;
     }
+
+    m_angle = angle;
 }
 
 void
-Spaceship::RotateCounterClockwise(float angle)
+Spaceship::RotateAntiClockwise(float dt)
 {
-    m_angle += angle;
+    float angle = m_angle + k_rotation_factor*(dt * k_pi);
     while (angle > k_pi2) {
-        m_angle -= k_pi2;
+        angle -= k_pi2;
     }
+
+    m_angle = angle;
 }
 
 void
-Spaceship::Update(float dt)
+Spaceship::MoveForward(float dt)
 {
     float speed = 0.8f;
     if (m_speed_prop >= 0.0f) {
@@ -88,8 +98,28 @@ Spaceship::ShootLazer()
 {
     float speed = 1.2f;
     float r = 0.05f;
+
+
+    // find mesh positions, and rotate them to fit
+    float a = m_angle;
+    Mat4x4 rotation_z = {
+        {std::cos(a), -std::sin(a), 0.0f, 0.0f},
+        {std::sin(a),  std::cos(a), 0.0f, 0.0f},
+        {0.0f,        0.0f,         1.0f, 0.0f},
+        {0.0f,        0.0f,         0.0f, 1.0f},
+    };
+    assert(m_mesh.m_vertices.size() == 6);
+    V2F32* rel_pos_unrotated = (V2F32*)&m_mesh.m_vertices[4];
+    V2F32  rel_pos_rotated = mat4x4_dot_v2f32(rotation_z, rel_pos_unrotated);
+
+    V2F32 pos = {
+        m_pos.x + rel_pos_rotated.x,
+        m_pos.y + rel_pos_rotated.y,
+    };
+
+
     Lazer lazer {
-        {m_pos.x, m_pos.y, r},
+        {pos.x, pos.y, r},
         {speed * std::cos(m_angle + k_pi/2),
          speed * std::sin(m_angle + k_pi/2)}
     };

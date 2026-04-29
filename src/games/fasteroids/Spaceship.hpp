@@ -13,13 +13,20 @@ struct Lazer {
 class Spaceship {
 public:
     Spaceship();
-    void BoostForward();
-    void RotateClockwise(float angle);
-    void RotateCounterClockwise(float angle);
+    void Reset();
+
+    void StartBoost();
+    void MoveForward(float dt);
+    void RotateClockwise(float dt);
+    void RotateAntiClockwise(float dt);
     Lazer ShootLazer();
 
-    void Update(float dt);
     void Draw();
+
+
+private:
+    static constexpr float k_rotation_factor = 1.4f;
+
 
 private:
     V2F32 m_pos;

@@ -11,6 +11,8 @@ public:
     void Draw();
     void Update(float dt);
 
+    V2F32 GetPos() {return m_pos;}
+
 private:
     V2F32 m_pos;
     float m_speed;

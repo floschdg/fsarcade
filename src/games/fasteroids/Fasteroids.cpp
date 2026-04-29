@@ -3,9 +3,6 @@
 #include "renderer/Renderer.hpp"
 
 
-static constexpr float k_pi = static_cast<float>(std::numbers::pi);
-
-
 std::unique_ptr<Game>
 Game::CreateFasteroids()
 {
@@ -17,8 +14,18 @@ Fasteroids::Start()
 {
     g_renderer.SetCameraSize(4.0f, 3.0f);
 
+    m_ship.Reset();
+
+    m_lazers.clear();
+
     m_asteroids.clear();
     m_asteroids.push_back(Asteroid());
+
+    m_is_boost_forward = false;
+    m_is_rotate_clockwise = false;
+    m_is_rotate_anticlockwise = false;
+
+    m_asteroid_spawn_time_left = 1.0f;
 
     m_game_status = game_resume;
 }
@@ -30,31 +37,83 @@ Fasteroids::ProcessEvent(SDL_Event& event)
     case SDL_EVENT_KEY_DOWN: {
         SDL_Keycode keycode = event.key.key;
         if (keycode == SDLK_LEFT) {
-            m_ship.RotateCounterClockwise(k_pi/32);
+            m_is_rotate_anticlockwise = true;
         }
         else if (keycode == SDLK_RIGHT) {
-            m_ship.RotateClockwise(k_pi/32);
+            m_is_rotate_clockwise = true;
         }
         else if (keycode == SDLK_UP) {
-            m_ship.BoostForward();
+            m_is_boost_forward = true;
         }
         else if (keycode == SDLK_SPACE) {
-            m_lazers.emplace_back(m_ship.ShootLazer());
+            if (!event.key.repeat) {
+                m_lazers.emplace_back(m_ship.ShootLazer());
+            }
         }
-    }
+    } break;
+    case SDL_EVENT_KEY_UP: {
+        SDL_Keycode keycode = event.key.key;
+        if (keycode == SDLK_LEFT) {
+            m_is_rotate_anticlockwise = false;
+        }
+        else if (keycode == SDLK_RIGHT) {
+            m_is_rotate_clockwise = false;
+        }
+        else if (keycode == SDLK_UP) {
+            m_is_boost_forward = false;
+        }
+    } break;
     }
 }
 
 void
 Fasteroids::Update(float dt)
 {
-    m_ship.Update(dt);
+    if (m_is_boost_forward) {
+        m_ship.StartBoost();
+    }
+    if (m_is_rotate_clockwise) {
+        m_ship.RotateClockwise(dt);
+    }
+    if (m_is_rotate_anticlockwise) {
+        m_ship.RotateAntiClockwise(dt);
+    }
+    m_ship.MoveForward(dt);
+
 
     for (Lazer& lazer : m_lazers) {
         lazer.Update(dt);
     }
+    DespawnDistantLazers();
 
-    AABB aabb_world = {
+
+    for (Asteroid& asteroid : m_asteroids) {
+        asteroid.Update(dt);
+    }
+    DespawnDistantAsteroids();
+
+
+    MaybeSpawnAsteroid(dt);
+}
+
+void
+Fasteroids::MaybeSpawnAsteroid(float dt)
+{
+    float time_left = m_asteroid_spawn_time_left;
+    time_left -= dt;
+    if (time_left <= 0.0f) {
+        m_asteroids.emplace_back(Asteroid());
+        m_asteroid_spawn_time_left = 1.0f;
+    }
+    else {
+        m_asteroid_spawn_time_left = time_left;
+    }
+}
+
+void
+Fasteroids::DespawnDistantLazers()
+{
+    AABB aabb_camera = {
         0.0f, 0.0f,
         4.0f, 3.0f
     };
@@ -62,7 +121,7 @@ Fasteroids::Update(float dt)
     auto it = m_lazers.begin();
     while (it < m_lazers.end()) {
         while (it < m_lazers.end()) {
-            if (!Intersect_AABB_Circle(aabb_world, it->circle)) {
+            if (!Intersect_AABB_Circle(aabb_camera, it->circle)) {
                 std::iter_swap(it, m_lazers.end()-1);
                 m_lazers.pop_back();
             }
@@ -73,8 +132,38 @@ Fasteroids::Update(float dt)
         it++;
     }
 
-    for (Asteroid& asteroid : m_asteroids) {
-        asteroid.Update(dt);
+}
+
+void
+Fasteroids::DespawnDistantAsteroids()
+{
+    AABB aabb_camera = {
+        0.0f, 0.0f,
+        4.0f, 3.0f
+    };
+
+    auto it = m_asteroids.begin();
+    while (it < m_asteroids.end()) {
+        while (it < m_asteroids.end()) {
+            // temporary hack, instead do:
+            // - have larger world with a smaller camera.
+            // - just decide if pos is outside world
+            float r = 2.0f * std::max(aabb_camera.x1, aabb_camera.y1);
+            V2F32 pos = it->GetPos();
+            Circle circle = {
+                .x = pos.x,
+                .y = pos.y,
+                .r = r
+            };
+            if (!Intersect_AABB_Circle(aabb_camera, circle)) {
+                std::iter_swap(it, m_asteroids.end()-1);
+                m_asteroids.pop_back();
+            }
+            else {
+                break;
+            }
+        }
+        it++;
     }
 }
 
